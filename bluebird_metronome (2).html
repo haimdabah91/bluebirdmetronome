@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bluebird Metronome</title>
+<style>
+  :root {
+    --sky: #294f70;
+    --sky-deep: #1d3d59;
+    --panel: #203f5b;
+    --panel-light: #315b7c;
+    --text: #f4f8fc;
+    --muted: #b9cede;
+    --accent: #a9e1ff;
+    --line: #527895;
+    --white-flash: 0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--sky); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  body { min-height: 100vh; }
+  body.flash { background: #fff !important; }
+  body.flash #app { background: #fff !important; color: #173047; }
+  body.flash .panel, body.flash .display-card { background: #f2f7fb; border-color: #d1dce6; }
+  body.flash .muted, body.flash .sub-label { color: #49677f; }
+  #app { min-height: 100vh; padding: clamp(16px, 3vw, 38px); background: radial-gradient(ellipse at 50% 0%, #3a6587 0%, var(--sky) 52%, #223f59 100%); transition: background-color 45ms linear, color 45ms linear; }
+  header { max-width: 1200px; margin: 0 auto 22px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .brand { display:flex; align-items:center; gap:12px; }
+  .logo { width:44px; height:44px; border-radius:14px; display:grid; place-items:center; background:#b8e6ff; color:#173a55; font-size:25px; font-weight:900; box-shadow:0 5px 18px #102d4433; }
+  h1 { margin:0; font-size:clamp(22px,3vw,32px); letter-spacing:-.04em; }
+  .subtitle { color:var(--muted); font-size:13px; margin-top:3px; }
+  .top-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  button, input, select { font:inherit; }
+  button { cursor:pointer; border:1px solid var(--line); color:var(--text); background:#2d5271; border-radius:11px; padding:10px 14px; font-weight:650; transition: transform .08s ease, background .12s ease, border-color .12s ease; }
+  button:hover { background:#396588; border-color:#8eb9d6; }
+  button:active { transform:translateY(1px); }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline:3px solid #a9e1ff; outline-offset:2px; }
+  button.primary { background:#c4ebff; border-color:#c4ebff; color:#17364e; }
+  button.primary:hover { background:#e0f5ff; }
+  button.selected { background:#c4ebff; color:#17364e; border-color:#c4ebff; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #tapBtn { position:relative; }
+  #tapBtn::after {
+    content:"(use spacebar)";
+    position:absolute;
+    left:50%;
+    top:calc(100% + 9px);
+    transform:translate(-50%, -3px);
+    padding:7px 10px;
+    border:1px solid #7195b0;
+    border-radius:8px;
+    background:#17364f;
+    color:#f4f8fc;
+    font-size:12px;
+    font-weight:600;
+    white-space:nowrap;
+    opacity:0;
+    visibility:hidden;
+    pointer-events:none;
+    box-shadow:0 6px 18px #102b4050;
+    transition:opacity .12s ease, transform .12s ease, visibility .12s;
+    z-index:50;
+  }
+  #tapBtn:hover::after, #tapBtn:focus-visible::after {
+    opacity:1;
+    visibility:visible;
+    transform:translate(-50%, 0);
+  }
+  main { max-width:1200px; margin:auto; display:grid; grid-template-columns:minmax(0, 1.1fr) minmax(330px, .9fr); gap:18px; }
+  .panel { background:linear-gradient(145deg, #244762ee, #1c3b56ee); border:1px solid #527895; border-radius:22px; padding:clamp(17px,2.5vw,26px); box-shadow:0 14px 40px #102b4025; }
+  .display-card { min-height:320px; display:flex; flex-direction:column; justify-content:space-between; align-items:center; text-align:center; padding:24px; background:linear-gradient(150deg,#2c5473,#1d3c57); border:1px solid #5c819d; border-radius:19px; position:relative; overflow:hidden; }
+  .measure-label { color:var(--muted); text-transform:uppercase; letter-spacing:.15em; font-size:12px; font-weight:750; }
+  .beat-number { font-size:clamp(76px,13vw,148px); line-height:1; letter-spacing:-.07em; font-weight:850; font-variant-numeric:tabular-nums; margin:12px 0; text-shadow:0 8px 30px #0c263b55; }
+  .beat-number.downbeat { color:#c9efff; }
+  .beat-number.pulse { transform:scale(1.045); }
+  .beat-dots { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin:8px 0 14px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:#64859e; border:1px solid #8eacc2; }
+  .dot.active { background:#d2f1ff; border-color:#fff; box-shadow:0 0 16px #bce9ff99; transform:scale(1.2); }
+  .dot.first { border:2px solid #c2eaff; }
+  .status { color:var(--muted); font-size:14px; min-height:21px; }
+  .transport { display:flex; gap:10px; margin-top:16px; }
+  .transport button { min-width:110px; padding:13px 18px; }
+  .section-title { margin:0 0 17px; font-size:16px; letter-spacing:-.01em; }
+  .control-section + .control-section { border-top:1px solid #52789588; margin-top:22px; padding-top:22px; }
+  .row { display:flex; align-items:center; gap:12px; }
+  .row.spread { justify-content:space-between; }
+  .muted, .sub-label { color:var(--muted); font-size:13px; }
+  .bpm-value { font-size:52px; font-weight:850; letter-spacing:-.06em; font-variant-numeric:tabular-nums; line-height:1; }
+  .bpm-display { text-align:center; min-width:100px; }
+  .bpm-controls { display:flex; align-items:center; justify-content:center; gap:12px; margin:12px 0; }
+  .round { width:42px; height:42px; padding:0; border-radius:50%; font-size:22px; }
+  input[type="range"] { width:100%; accent-color:#bce8ff; cursor:pointer; }
+  input[type="number"], select { width:100%; min-width:0; background:#18364f; color:var(--text); border:1px solid #6385a0; border-radius:10px; padding:10px 11px; }
+  label { display:block; color:var(--muted); font-size:12px; font-weight:700; margin-bottom:7px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:13px; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; }
+  .mode-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+  .mode-button { text-align:left; min-height:56px; padding:11px 12px; }
+  .mode-button span { display:block; font-size:13px; }
+  .mode-button small { display:block; font-size:11px; color:var(--muted); font-weight:500; margin-top:4px; }
+  .mode-button.selected small { color:#41657d; }
+  .subdivisions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+  .check-option { display:flex; align-items:center; gap:9px; border:1px solid #527895; border-radius:11px; padding:11px; color:var(--text); font-size:13px; background:#18364f55; cursor:pointer; }
+  .check-option:has(input:checked) { border-color:#bce8ff; background:#3c6480; }
+  .check-option input { accent-color:#bce8ff; width:16px; height:16px; }
+  .help { margin-top:10px; line-height:1.5; }
+  .meter-note { margin-top:9px; }
+  .volume-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  body.focus-display #app > header,
+  body.focus-display main > section:not(:first-child),
+  body.focus-display main > section:first-child > :not(#displayCard),
+  body.focus-display .footer { display:none !important; }
+  body.focus-display main { display:block; max-width:none; margin:0; }
+  body.focus-display main > section:first-child { padding:0; margin:0; border:0; box-shadow:none; background:transparent; }
+  body.focus-display #displayCard { position:fixed; inset:0; z-index:9999; width:100vw; height:100vh; min-height:100vh; border:0; border-radius:0; padding:clamp(24px,5vw,64px); justify-content:space-around; }
+  body.focus-display #beatNumber { font-size:clamp(120px,28vw,300px); }
+  body.focus-display .beat-dots { gap:clamp(10px,1.5vw,22px); }
+  body.focus-display .dot { width:clamp(12px,1.3vw,20px); height:clamp(12px,1.3vw,20px); }
+  body.focus-display #exitDisplayFocus { display:block; position:absolute; top:18px; right:18px; z-index:2; }
+  #exitDisplayFocus { display:none; }
+  .footer { max-width:1200px; margin:16px auto 0; text-align:center; color:#b4cadd; font-size:12px; line-height:1.6; }
+  kbd { background:#18364f; border:1px solid #527895; border-radius:5px; padding:2px 5px; font-size:11px; }
+  @media (max-width:850px) { main { grid-template-columns:1fr; } .display-card { min-height:285px; } }
+  @media (max-width:460px) { header { align-items:flex-start; flex-direction:column; } .top-actions { justify-content:flex-start; } .grid3 { grid-template-columns:1fr 1fr; } .transport button { min-width:0; flex:1; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="logo">♩</div>
+      <div><h1>Bluebird Metronome</h1></div>
+    </div>
+    <div class="top-actions">
+      <button id="tapBtn" aria-label="Tap Tempo; press the spacebar eight times to set the tempo">Tap Tempo</button>
+      <button id="fullscreenBtn">⛶ Full screen</button>
+      <button id="displayFocusBtn" title="Enlarge the metronome display module to fill the screen">▣ Display only</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="display-card" id="displayCard">
+        <button id="exitDisplayFocus">✕ Exit display-only view</button>
+        <div class="measure-label" id="measureLabel">MEASURE 1</div>
+        <div>
+          <div class="beat-number" id="beatNumber">1</div>
+          <div class="beat-dots" id="beatDots" aria-label="Beats in current measure"></div>
+          <div class="status" id="status">Ready when you are</div>
+        </div>
+        <div class="row" style="gap:20px; justify-content:center; width:100%">
+          <div><div class="sub-label">TIME SIGNATURE</div><strong id="signatureSummary">4 / 4</strong></div>
+          <div style="width:1px;height:32px;background:#64839a"></div>
+          <div><div class="sub-label">SUBDIVISIONS</div><strong id="subdivisionSummary">Quarter notes</strong></div>
+        </div>
+      </div>
+      <div class="transport">
+        <button id="startBtn" class="primary">▶ Start</button>
+        <button id="stopBtn" disabled>■ Stop</button>
+      </div>
+      <div class="control-section" style="margin-top:24px">
+        <h2 class="section-title">Tempo</h2>
+        <div class="row spread">
+          <div><div class="muted">Beats per minute</div><div class="bpm-value" id="bpmReadout">100</div></div>
+          <div style="width:115px"><label for="bpmInput">Enter BPM</label><input id="bpmInput" type="number" min="20" max="300" value="100" step="1"></div>
+        </div>
+        <div class="bpm-controls">
+          <button class="round" id="minus5" aria-label="Decrease tempo by five">−</button>
+          <button class="round" id="minus1" aria-label="Decrease tempo by one">−</button>
+          <input id="bpmRange" type="range" min="20" max="300" value="100" aria-label="Tempo slider">
+          <button class="round" id="plus1" aria-label="Increase tempo by one">+</button>
+          <button class="round" id="plus5" aria-label="Increase tempo by five">+</button>
+        </div>
+      </div>
+      <div class="control-section">
+        <h2 class="section-title">Time signature</h2>
+        <div class="grid2">
+          <div><label for="numerator">Beats per measure (numerator)</label><input id="numerator" type="number" min="1" max="16" value="4"></div>
+          <div><label for="denominator">Note value (denominator)</label>
+            <select id="denominator">
+              <option value="1">1 — whole note</option><option value="2">2 — half note</option><option value="4" selected>4 — quarter note</option><option value="8">8 — eighth note</option><option value="16">16 — sixteenth note</option>
+            </select>
+          </div>
+        </div>
+        <div class="meter-note muted" id="meterNote">One measure contains four quarter-note beats.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="control-section" style="margin-top:0;padding-top:0;border-top:0">
+        <h2 class="section-title">First-beat indicator</h2>
+        <div class="mode-grid" role="group" aria-label="First beat indicator mode">
+          <button class="mode-button selected" data-mode="flash"><span>White flash</span><small>Entire screen flashes white</small></button>
+          <button class="mode-button" data-mode="accent"><span>Accent</span><small>Stronger, higher downbeat</small></button>
+          <button class="mode-button" data-mode="both"><span>Both</span><small>Flash and accented sound</small></button>
+          <button class="mode-button" data-mode="none"><span>None</span><small>No special downbeat cue</small></button>
+        </div>
+        
+      </div>
+
+      <div class="control-section">
+        <h2 class="section-title">Count these note values</h2>
+        <div class="subdivisions">
+          <label class="check-option"><input type="checkbox" value="2"> Half notes</label>
+          <label class="check-option"><input type="checkbox" value="4" checked> Quarter notes</label>
+          <label class="check-option"><input type="checkbox" value="8"> Eighth notes</label>
+          <label class="check-option"><input type="checkbox" value="16"> Sixteenth notes</label>
+        </div>
+        
+      </div>
+
+      <div class="control-section">
+        <h2 class="section-title">Sound and dynamics</h2>
+        <div style="margin-bottom:18px; padding:13px 14px; border:1px solid #527895; border-radius:12px; background:#18364f66">
+          <div class="row spread"><label for="masterVolume">Overall volume</label><span id="masterVolumeVal" class="muted">100%</span></div>
+          <input id="masterVolume" type="range" min="0" max="100" value="100" aria-label="Overall metronome volume">
+          <div class="help muted" style="margin-top:5px">Controls the loudness of every metronome sound, including accents and subdivisions.</div>
+        </div>
+        <div class="volume-row">
+          <div><div class="row spread"><label for="volume">Main beat volume</label><span id="volumeVal" class="muted">70%</span></div><input id="volume" type="range" min="0" max="100" value="70"></div>
+          <div><div class="row spread"><label for="subVolume">Subdivision volume</label><span id="subVolumeVal" class="muted">42%</span></div><input id="subVolume" type="range" min="0" max="100" value="42"></div>
+          <div><div class="row spread"><label for="accent">Downbeat accent</label><span id="accentVal" class="muted">95%</span></div><input id="accent" type="range" min="0" max="100" value="95"></div>
+          <div><div class="row spread"><label for="tone">Main tone pitch</label><span id="toneVal" class="muted">1000 Hz</span></div><input id="tone" type="range" min="500" max="1600" value="1000" step="25"></div>
+        </div>
+        <div style="margin-top:17px">
+          <div class="row spread"><label for="subPitch">Subdivision pitch</label><span id="subPitchVal" class="muted">750 Hz</span></div>
+          <input id="subPitch" type="range" min="250" max="1200" value="750" step="25">
+        </div>
+        
+      </div>
+      <div class="control-section">
+        <h2 class="section-title">Quick settings</h2>
+        <div class="grid3">
+          <button data-preset="60">♩ 60 BPM</button>
+          <button data-preset="80">♩ 80 BPM</button>
+          <button data-preset="120">♩ 120 BPM</button>
+          <button id="testSound">♪ Test sound</button>
+          <button id="resetBtn">Reset defaults</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div class="footer">Keyboard shortcuts: <kbd>Space</kbd> start/stop · <kbd>T</kbd> tap tempo · <kbd>F</kbd> full screen. Keep this tab open while practicing.</div>
+</div>
+<script>
+(() => {
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const body = document.body;
+  const bpmInput = $("bpmInput"), bpmRange = $("bpmRange");
+  const numerator = $("numerator"), denominator = $("denominator");
+  const volume = $("volume"), subVolume = $("subVolume"), accent = $("accent"), masterVolume = $("masterVolume");
+  const tone = $("tone"), subPitch = $("subPitch");
+  let running = false, timerId = null, nextTime = 0, beatIndex = 0, measure = 1;
+  let audioCtx = null, tapTimes = [], tapCaptureActive = false, flashTimeout = null, visualTimeout = null;
+  let currentSubdivisionIndex = 0, eventList = [], eventCursor = 0, nextMeasureStart = 0;
+  const LOOKAHEAD_MS = 25, SCHEDULE_AHEAD = 0.12;
+  let mode = "flash";
+  let lastVisualBeat = -1;
+
+  function bpm() { return clamp(Number(bpmInput.value) || 100, 20, 300); }
+  function clamp(n, lo, hi) { return Math.min(hi, Math.max(lo, n)); }
+  function beatsPerMeasure() { return clamp(parseInt(numerator.value, 10) || 4, 1, 16); }
+  function denominatorValue() { return Number(denominator.value) || 4; }
+  function selectedValues() {
+    return [...document.querySelectorAll('.subdivisions input:checked')].map(el => Number(el.value));
+  }
+  function ensureAudio() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = Number(masterVolume.value) / 100;
+      masterGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+  function setBpm(value) {
+    const n = clamp(Math.round(Number(value) || 100), 20, 300);
+    bpmInput.value = n; bpmRange.value = n; $("bpmReadout").textContent = n;
+    updateSummary();
+  }
+  function updateLabels() {
+    $("masterVolumeVal").textContent = masterVolume.value + "%";
+    if (masterGain && audioCtx) masterGain.gain.setTargetAtTime(Number(masterVolume.value) / 100, audioCtx.currentTime, 0.015);
+    $("volumeVal").textContent = volume.value + "%";
+    $("subVolumeVal").textContent = subVolume.value + "%";
+    $("accentVal").textContent = accent.value + "%";
+    $("toneVal").textContent = tone.value + " Hz";
+    $("subPitchVal").textContent = subPitch.value + " Hz";
+  }
+  function updateSummary() {
+    const n = beatsPerMeasure(), d = denominatorValue();
+    $("signatureSummary").textContent = `${n} / ${d}`;
+    const vals = selectedValues();
+    const names = {2:"Half",4:"Quarter",8:"Eighth",16:"Sixteenth"};
+    $("subdivisionSummary").textContent = vals.length ? vals.map(v => names[v]).join(" + ") + (vals.length === 1 ? " notes" : "") : "Silent";
+    const quarterUnits = n * 4 / d;
+    $("meterNote").textContent = `A measure contains ${quarterUnits % 1 ? quarterUnits.toFixed(2) : quarterUnits} quarter-note beats. Tempo is measured in quarter notes per minute.`;
+    drawDots();
+  }
+  function drawDots(active = -1) {
+    const n = beatsPerMeasure();
+    $("beatDots").innerHTML = "";
+    const shown = Math.min(n, 16);
+    for (let i=0; i<shown; i++) {
+      const dot = document.createElement("span");
+      dot.className = "dot" + (i===0 ? " first" : "") + (i===active ? " active" : "");
+      dot.title = `Beat ${i+1}`;
+      $("beatDots").appendChild(dot);
+    }
+    if (n > 16) {
+      const more = document.createElement("span"); more.className="muted"; more.textContent=`+${n-16}`; $("beatDots").appendChild(more);
+    }
+  }
+  function flashScreen(time) {
+    const delay = Math.max(0, (time - audioCtx.currentTime) * 1000);
+    window.setTimeout(() => {
+      body.classList.add("flash");
+      clearTimeout(flashTimeout);
+      flashTimeout = setTimeout(() => body.classList.remove("flash"), 90);
+    }, delay);
+  }
+  function scheduleTone(time, frequency, gainAmount, duration=0.055) {
+    const ctx = ensureAudio();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(frequency, time);
+    gain.gain.setValueAtTime(0.0001, time);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, gainAmount), time + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+    osc.connect(gain); gain.connect(masterGain || ctx.destination);
+    osc.start(time); osc.stop(time + duration + 0.01);
+  }
+  function isAccentPosition(t) {
+    // The first event in every measure is the downbeat.
+    return Math.abs(t) < 0.000001;
+  }
+  function buildMeasureEvents() {
+    const n = beatsPerMeasure(), d = denominatorValue();
+    // One denominator-note unit is 4/d quarter notes. Tempo is quarter-note BPM.
+    const measureQuarterLength = n * 4 / d;
+    const vals = selectedValues();
+    const positions = new Map();
+    for (const value of vals) {
+      // A note value v recurs every (4/v) quarter notes.
+      const step = 4 / value;
+      for (let t = 0; t < measureQuarterLength - 1e-8; t += step) {
+        const key = Math.round(t * 1000000) / 1000000;
+        const existing = positions.get(key);
+        // If a quarter and eighth land together, prefer the larger note value (pulse sound).
+        if (!existing || value < existing.value) positions.set(key, {t:key, value});
+      }
+    }
+    return [...positions.values()].sort((a,b)=>a.t-b.t);
+  }
+  function scheduleEvent(event, time, measureStart) {
+    const isDownbeat = Math.abs(event.t) < 1e-7;
+    const isQuarterPulse = Math.abs((event.t * 4) - Math.round(event.t * 4)) < 1e-7 &&
+                           Math.abs((event.t * 4) % 4) < 1e-7; // whole-quarter boundaries
+    const main = event.value === 4 || isQuarterPulse;
+    const isAccent = isDownbeat && (mode === "accent" || mode === "both");
+    const baseVol = Number(volume.value) / 100;
+    const subVol = Number(subVolume.value) / 100;
+    const accentVol = Number(accent.value) / 100;
+    let vol = main ? baseVol : subVol;
+    let freq = main ? Number(tone.value) : Number(subPitch.value);
+    if (isAccent) { vol = Math.max(vol, accentVol); freq = Number(tone.value) * 1.22; }
+    // The mode "none" suppresses the special downbeat accent, not the normal beat click.
+    scheduleTone(time, freq, vol * 0.22, main ? 0.065 : 0.045);
+    const beatUnit = 4 / denominatorValue();
+    const beatNumber = Math.floor(event.t / beatUnit + 1e-7) + 1;
+    const measureNumber = measure;
+    const delay = Math.max(0, (time - audioCtx.currentTime) * 1000);
+    window.setTimeout(() => {
+      if (!running) return;
+      $("measureLabel").textContent = `MEASURE ${measureNumber}`;
+      $("beatNumber").textContent = isDownbeat ? "1" : String(beatNumber);
+      $("beatNumber").classList.toggle("downbeat", isDownbeat);
+      $("beatNumber").classList.add("pulse");
+      clearTimeout(visualTimeout);
+      visualTimeout = setTimeout(() => $("beatNumber").classList.remove("pulse"), 90);
+      drawDots(Math.min(beatsPerMeasure()-1, Math.floor(event.t / beatUnit + 1e-7)));
+      $("status").textContent = isDownbeat ? "Downbeat" : (main ? "Pulse" : "Subdivision");
+      if (isDownbeat && (mode === "flash" || mode === "both")) flashScreen(time);
+    }, delay);
+  }
+  function scheduler() {
+    if (!running) return;
+    const ctx = ensureAudio();
+    while (nextTime < ctx.currentTime + SCHEDULE_AHEAD) {
+      if (eventCursor >= eventList.length) {
+        const length = beatsPerMeasure() * 4 / denominatorValue();
+        nextMeasureStart += length * 60 / bpm();
+        measure++;
+        eventList = buildMeasureEvents();
+        eventCursor = 0;
+      }
+      const ev = eventList[eventCursor++];
+      const t = nextMeasureStart + ev.t * 60 / bpm();
+      scheduleEvent(ev, t, nextMeasureStart);
+      nextTime = t;
+    }
+    timerId = setTimeout(scheduler, LOOKAHEAD_MS);
+  }
+  function start() {
+    if (running) return;
+    ensureAudio();
+    running = true; beatIndex = 0; measure = 1;
+    eventList = buildMeasureEvents(); eventCursor = 0;
+    nextMeasureStart = audioCtx.currentTime + 0.08;
+    nextTime = nextMeasureStart;
+    $("startBtn").disabled = true; $("stopBtn").disabled = false;
+    $("status").textContent = "Playing";
+    scheduler();
+  }
+  function stop() {
+    running = false;
+    clearTimeout(timerId);
+    body.classList.remove("flash");
+    $("startBtn").disabled = false; $("stopBtn").disabled = true;
+    $("status").textContent = "Stopped";
+    $("measureLabel").textContent = "READY";
+    $("beatNumber").textContent = "—";
+    $("beatNumber").classList.remove("pulse","downbeat");
+    drawDots();
+  }
+  function testSound() {
+    ensureAudio();
+    const t = audioCtx.currentTime + 0.02;
+    scheduleTone(t, Number(tone.value), Number(volume.value)/100*0.22);
+    scheduleTone(t+0.12, Number(subPitch.value), Number(subVolume.value)/100*0.22, 0.045);
+  }
+  function setMode(next) {
+    mode = next;
+    document.querySelectorAll("[data-mode]").forEach(btn => btn.classList.toggle("selected", btn.dataset.mode === mode));
+  }
+  function restartIfRunning() {
+    updateSummary();
+    if (running) { stop(); start(); }
+  }
+  $("startBtn").addEventListener("click", start);
+  $("stopBtn").addEventListener("click", stop);
+  bpmInput.addEventListener("input", () => setBpm(bpmInput.value));
+  bpmRange.addEventListener("input", () => setBpm(bpmRange.value));
+  $("minus1").addEventListener("click", () => setBpm(bpm()-1));
+  $("plus1").addEventListener("click", () => setBpm(bpm()+1));
+  $("minus5").addEventListener("click", () => setBpm(bpm()-5));
+  $("plus5").addEventListener("click", () => setBpm(bpm()+5));
+  numerator.addEventListener("change", () => { numerator.value=clamp(parseInt(numerator.value)||4,1,16); restartIfRunning(); });
+  denominator.addEventListener("change", restartIfRunning);
+  document.querySelectorAll('.subdivisions input').forEach(el => el.addEventListener("change", restartIfRunning));
+  [masterVolume,volume,subVolume,accent,tone,subPitch].forEach(el => el.addEventListener("input", updateLabels));
+  document.querySelectorAll("[data-mode]").forEach(btn => btn.addEventListener("click", () => setMode(btn.dataset.mode)));
+  document.querySelectorAll("[data-preset]").forEach(btn => btn.addEventListener("click", () => setBpm(btn.dataset.preset)));
+  $("testSound").addEventListener("click", testSound);
+  function finishTapCapture() {
+    if (tapTimes.length === 8) {
+      const intervals = [];
+      for (let i=1; i<tapTimes.length; i++) intervals.push(tapTimes[i]-tapTimes[i-1]);
+      const avg = intervals.reduce((a,b)=>a+b,0)/intervals.length;
+      if (avg > 0) setBpm(Math.round(60000/avg));
+      $("tapBtn").textContent = `Tempo set: ${bpm()} BPM`;
+    } else {
+      $("tapBtn").textContent = "Tap Tempo";
+    }
+    tapCaptureActive = false;
+    tapTimes = [];
+    clearTimeout(window.tapReset);
+    window.tapReset = setTimeout(() => { $("tapBtn").textContent="Tap Tempo"; }, 2200);
+  }
+  $("tapBtn").addEventListener("click", () => {
+    tapTimes = [];
+    tapCaptureActive = true;
+    $("tapBtn").textContent = "Press Space · 0/8";
+    $("status").textContent = "Tap tempo: press Space eight times in rhythm";
+    clearTimeout(window.tapReset);
+    window.tapReset = setTimeout(() => {
+      if (tapCaptureActive) {
+        tapCaptureActive = false;
+        tapTimes = [];
+        $("tapBtn").textContent = "Tap Tempo";
+        $("status").textContent = running ? "Playing" : "Ready when you are";
+      }
+    }, 10000);
+  });
+  $("fullscreenBtn").addEventListener("click", async () => {
+    try {
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch (e) { $("status").textContent = "Full-screen mode is unavailable in this browser."; }
+  });
+  $("resetBtn").addEventListener("click", () => {
+    stop(); setBpm(100); numerator.value=4; denominator.value="4";
+    document.querySelectorAll('.subdivisions input').forEach(el => el.checked = el.value==="4");
+    masterVolume.value=100; volume.value=70; subVolume.value=42; accent.value=95; tone.value=1000; subPitch.value=750;
+    setMode("flash"); updateLabels(); updateSummary();
+  });
+  $("displayFocusBtn").addEventListener("click", () => body.classList.add("focus-display"));
+  $("exitDisplayFocus").addEventListener("click", () => body.classList.remove("focus-display"));
+  document.addEventListener("keydown", e => {
+    if (tapCaptureActive && e.code === "Space") {
+      e.preventDefault();
+      if (e.repeat) return;
+      tapTimes.push(performance.now());
+      $("tapBtn").textContent = `Press Space · ${tapTimes.length}/8`;
+      if (tapTimes.length >= 8) finishTapCapture();
+      return;
+    }
+    if (e.code === "Space" && !["INPUT","SELECT","BUTTON"].includes(document.activeElement.tagName)) {
+      e.preventDefault(); running ? stop() : start();
+    }
+    if (e.key.toLowerCase() === "t" && !["INPUT","SELECT","TEXTAREA"].includes(document.activeElement.tagName)) $("tapBtn").click();
+    if (e.key.toLowerCase() === "f" && !["INPUT","SELECT","TEXTAREA"].includes(document.activeElement.tagName)) $("fullscreenBtn").click();
+  });
+  setBpm(100); updateLabels(); updateSummary();
+})();
+</script>
+</body>
+</html>
